@@ -8,26 +8,32 @@ class Client:
     def __init__(self, host, port):
         self.url = "ws://{}:{}".format(host, port)
         self.quit = False
+        self.websocket = None
 
     async def start(self):
-        async with websockets.connect(self.url) as websocket:
-            messenger = asyncio.create_task(self.send(websocket))
-            listener = asyncio.create_task(self.listen(websocket))
-            await messenger
+        self.websocket = await websockets.connect(self.url)
+        messenger = asyncio.create_task(self.messenger())
+        listener = asyncio.create_task(self.listener())
+        await messenger
         listener.cancel()
+        await self.websocket.close()
         print("Disconnected!")
 
-    async def listen(self, websocket):
-        async for message in websocket:
-            print('<< {}'.format(message))
+    async def listener(self):
+        try:
+            while True:
+                message = await self.websocket.recv()
+                print('<< {}'.format(message))
+        except websockets.ConnectionClosed:
+            print("Error: Unexpected disconnection!")
 
-    async def send(self, websocket):
+    async def messenger(self):
         while not self.quit:
             message = input("> ")
             if message == 'quit':
                 self.quit = True
             else:
-                await websocket.send(message)
+                await self.websocket.send(message)
 
 
 if __name__ == '__main__':

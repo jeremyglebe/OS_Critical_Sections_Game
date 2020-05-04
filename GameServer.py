@@ -7,12 +7,18 @@ clients = set()
 
 async def connection_handler(websocket, path):
     clients.add(websocket)
-    async for message in websocket:
-        print(clients)
-        for ws in clients:
-            if ws is not websocket:
-                await ws.send(message)
-        print(message)
+    try:
+        while True:
+            message = await websocket.recv()
+            for ws in clients:
+                if ws is not websocket:
+                    try:
+                        await ws.send(message)
+                    except websockets.ConnectionClosed:
+                        print("Tried to send message to disconnected client!")
+            print(message)
+    except websockets.ConnectionClosed:
+        print("Client disconnected...")
     clients.remove(websocket)
 
 listen = websockets.serve(connection_handler, "localhost", 8080)
