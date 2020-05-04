@@ -8,6 +8,7 @@ clients = set()
 async def connection_handler(websocket, path):
     clients.add(websocket)
     async for message in websocket:
+        print(clients)
         for ws in clients:
             if ws is not websocket:
                 await ws.send(message)

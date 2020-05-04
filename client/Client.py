@@ -14,7 +14,7 @@ class Client:
             messenger = asyncio.create_task(self.send(websocket))
             listener = asyncio.create_task(self.listen(websocket))
             await messenger
-            await listener
+        listener.cancel()
         print("Disconnected!")
 
     async def listen(self, websocket):
@@ -24,9 +24,10 @@ class Client:
     async def send(self, websocket):
         while not self.quit:
             message = input("> ")
-            await websocket.send(message)
             if message == 'quit':
                 self.quit = True
+            else:
+                await websocket.send(message)
 
 
 if __name__ == '__main__':
