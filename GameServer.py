@@ -21,7 +21,17 @@ async def connection_handler(websocket, path):
         print("Client disconnected...")
     clients.remove(websocket)
 
-listen = websockets.serve(connection_handler, "localhost", 8080)
+async def echo(websocket, path):
+    async for message in websocket:
+        print(message)
+        await websocket.send(message)
 
+# async def connection(websocket, path):
+#     async for message in websocket:
+
+
+# Create the server connection handler
+listen = websockets.serve(connection_handler, "localhost", 8080)
+# Run the server
 asyncio.get_event_loop().run_until_complete(listen)
 asyncio.get_event_loop().run_forever()
