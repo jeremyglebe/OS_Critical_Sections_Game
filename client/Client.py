@@ -2,43 +2,48 @@
 
 import asyncio
 import websockets
-
-websocket = None
-
-
-async def start(url):
-    global websocket
-    websocket = await websockets.connect(url)
-    messenger_task = asyncio.create_task(messenger())
-    listener_task = asyncio.create_task(listener())
-    await messenger_task
-    listener_task.cancel()
-    await websocket.close()
-    print("Disconnected!")
+from random import random
+from math import floor
 
 
-async def listener():
-    try:
-        while True:
-            message = await websocket.recv()
-            print('\r<< {}\n> '.format(message), end='')
-    except websockets.ConnectionClosed:
-        print("Error: Unexpected disconnection!")
+class Client:
+    def __init__(self):
+        self.guess_mode = 0
+        self.websocket = None
 
+    def set_mode(self, guess_mode):
+        self.guess_mode = guess_mode
 
-async def messenger():
-    messenger_done = False
-    while not messenger_done:
-        message = await asyncio.get_event_loop().run_in_executor(None, input, "> ")
-        if message == 'quit':
-            messenger_done = True
-        else:
-            await websocket.send(message)
+    async def connect(self, host, port):
+        url = "ws://{}:{}".format(host, port)
+        self.websocket = await websockets.connect(url)
+        await self.start()
+
+    async def start(self):
+        try:
+            while True:
+                if self.guess_mode == 0:
+                    await self.guess_random()
+                await asyncio.sleep(1)
+        except websockets.ConnectionClosed:
+            print("Disconnected from server...")
+
+    async def guess_random(self):
+        guess = floor(random() * 100)
+        await self.websocket.send(str(guess))
+
+    async def listen_echo(self):
+        try:
+            async for message in self.websocket:
+                print(message)
+        except websockets.ConnectionClosed:
+            print("Error: Unexpected disconnection!")
 
 
 if __name__ == '__main__':
     # Get the server to connect to
     host = input("Enter host address: ")
     port = input("Enter host port: ")
-    url = "ws://{}:{}".format(host, port)
-    asyncio.get_event_loop().run_until_complete(start(url))
+    # Create a client object
+    cli = Client()
+    asyncio.get_event_loop().run_until_complete(cli.connect(host, port))
