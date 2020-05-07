@@ -41,9 +41,14 @@ class Client:
 
 
 if __name__ == '__main__':
-    # Get the server to connect to
-    host = input("Enter host address: ")
-    port = input("Enter host port: ")
-    # Create a client object
-    cli = Client()
-    asyncio.get_event_loop().run_until_complete(cli.connect(host, port))
+    try:
+        # Get the server to connect to
+        host = input("Enter host address: ")
+        port = input("Enter host port: ")
+        # Create a client object
+        cli = Client()
+        asyncio.get_event_loop().run_until_complete(cli.connect(host, port))
+    except KeyboardInterrupt:
+        print("\rClient closed by keypress...")
+    except:
+        print("An unexpected error occured!")
