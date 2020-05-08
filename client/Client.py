@@ -23,9 +23,9 @@ class Client:
         url = "ws://{}:{}".format(host, port)
         self.websocket = await websockets.connect(url)
         guess_task = asyncio.create_task(self.guess())
-        echo_task = asyncio.create_task(self.listen_echo())
+        response_task = asyncio.create_task(self.listen_response())
         await guess_task
-        echo_task.cancel()
+        response_task.cancel()
         await self.websocket.close()
         print("Disconnected!")
 
@@ -42,7 +42,7 @@ class Client:
         self.current_guess = floor(random() * 10) * choice((-1,1))
         await self.websocket.send(str(self.current_guess))
 
-    async def listen_echo(self):
+    async def listen_response(self):
         try:
             async for message in self.websocket:
                 if message == '-1':

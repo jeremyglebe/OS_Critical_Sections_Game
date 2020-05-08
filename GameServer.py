@@ -6,9 +6,11 @@ import websockets
 from math import floor
 from random import random, choice
 
+# Constants used for testing mostly
+MAX_SIZE = sys.maxsize
+
 clients = set()
-# secret_key = floor(random() * sys.maxsize) * choice((1,-1))
-secret_key = floor(random() * 10) * choice((1,-1))
+secret_key = floor(random() * MAX_SIZE) * choice((1,-1))
 
 async def connection(websocket, path):
     global secret_key
@@ -19,8 +21,7 @@ async def connection(websocket, path):
             if guess == secret_key:
                 await websocket.send('0')
                 print("Client guessed the key!")
-                # secret_key = floor(random() * sys.maxsize) * choice((1,-1))
-                secret_key = floor(random() * 10) * choice((1,-1))
+                secret_key = floor(random() * MAX_SIZE) * choice((1,-1))
                 print("The secret number is {}. Sssshhh...".format(secret_key))
             elif guess < secret_key:
                 await websocket.send('-1')
