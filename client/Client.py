@@ -2,8 +2,11 @@
 
 import asyncio
 import websockets
-from random import random, choice
+from random import random, randrange, choice
 from math import floor
+
+# Constants used for testing mostly
+WAIT_TIME = 0.01  # Time to wait per cycle of the lock manager
 
 
 class Client:
@@ -15,6 +18,9 @@ class Client:
         self.guess_mode = 0
         # This is the socket connection to the server
         self.websocket = None
+        # Variables to assist with guessing strategies
+        self.lower_bound = None
+        self.upper_bound = None
 
     async def connect(self, host, port):
         url = "ws://{}:{}".format(host, port)
@@ -39,30 +45,63 @@ class Client:
 
                 # The client should attempt a guess once it has acquired a lock
                 if self.guess_mode == 0:
-                    await self.guess_random()
-
-                # Once a guess has been made, we need to wait for a response
-                # from the server
-                guess_resp = await self.websocket.recv()
-                # Print the information regarding the guess response
-                if guess_resp == '-1':
-                    print(f"{self.current_guess} is too low!")
-                elif guess_resp == '1':
-                    print(f"{self.current_guess} is too high!")
-                elif guess_resp == '0':
-                    print(f"You guessed the key, {self.current_guess}!")
+                    await self.bounded_guess()
 
                 # Once the client has successfully guessed, it should release the lock
                 await self.websocket.send('release lock')
 
                 # Wait a moment between guesses
-                await asyncio.sleep(1)
+                await asyncio.sleep(WAIT_TIME)
         except websockets.ConnectionClosed:
             print("Disconnected from server...")
 
     async def guess_random(self):
         self.current_guess = floor(random() * 10) * choice((-1, 1))
         await self.websocket.send(str(self.current_guess))
+
+    async def bounded_guess(self):
+        # Determine a guess based on upper/lower bounds
+        # If we don't yet have bounds, make a guess between -1M and +1M
+        if self.upper_bound == None and self.lower_bound == None:
+            self.current_guess = floor(random() * 1000000) * choice((-1, 1))
+        # If there exists a lower bound but no upper bound, make a guess
+        # between LB and LB+2M
+        elif self.upper_bound == None:
+            self.current_guess = self.lower_bound + 2000000
+        # If there exists an upper bound but no lower bound, make a guess
+        # between UB - 2M and UB
+        elif self.lower_bound == None:
+            self.current_guess = self.upper_bound - 2000000
+        # If bounds are the same, then someone else solved the number already and we missed it
+        elif self.lower_bound == self.upper_bound:
+            self.lower_bound = None
+            self.upper_bound = None
+        # If both bounds exist, pick a value between the two
+        else:
+            self.current_guess = randrange(self.lower_bound, self.upper_bound + 1)
+
+        # Send the guess
+        await self.websocket.send(str(self.current_guess))
+        # Once a guess has been made, we need to wait for a response
+        # from the server
+        guess_resp = await self.websocket.recv()
+        # Print the information regarding the guess response
+        if guess_resp == '-1':
+            print(
+                f"{self.current_guess} is too low! Bounds {self.upper_bound}, {self.lower_bound}")
+            # Maybe update the lower bound
+            if self.lower_bound == None or self.current_guess > self.lower_bound:
+                self.lower_bound = self.current_guess
+        elif guess_resp == '1':
+            print(
+                f"{self.current_guess} is too high! Bounds {self.upper_bound}, {self.lower_bound}")
+            # Maybe update the upper bound
+            if self.upper_bound == None or self.current_guess < self.upper_bound:
+                self.upper_bound = self.current_guess
+        elif guess_resp == '0':
+            print(f"You guessed the key, {self.current_guess}!")
+            self.upper_bound = None
+            self.lower_bound = None
 
     def set_mode(self, guess_mode):
         self.guess_mode = guess_mode

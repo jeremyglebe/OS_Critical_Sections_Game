@@ -8,8 +8,8 @@ from math import floor
 from random import random, choice
 
 # Constants used for testing mostly
-MAX_SIZE = sys.maxsize  # Maximum value, positive and negative, to make key
-WAIT_TIME = 1  # Time to wait per cycle of the lock manager
+MAX_SIZE = sys.maxsize / 10000000000  # Maximum value, positive and negative, to make key
+WAIT_TIME = 0.01  # Time to wait per cycle of the lock manager
 FAKE_LOCK_CHANCE = 33  # Percentage chance each cycle for a fake locking
 
 # Set of connected clients
@@ -84,11 +84,11 @@ async def lock_manager():
                 else:
                     if len(lock_queue) > 0:
                         lock = lock_queue.popleft()
-                        print("Sending lock acquired")
+                        # print("Sending lock acquired")
                         await lock.send('lock acquired')
             elif lock == 'fake_client':
                 lock = None
-            print(f'Lock: {lock}')
+            # print(f'Lock: {lock}')
         except websockets.ConnectionClosed:
             print("Failed to send signal to disconnected client...")
             # Reset lock if the signal failed because the client disconnected
