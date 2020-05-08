@@ -8,7 +8,9 @@ from math import floor
 from random import random, choice
 
 # Constants used for testing mostly
-MAX_SIZE = sys.maxsize
+MAX_SIZE = sys.maxsize # Maximum value, positive and negative, to make key
+WAIT_TIME = .1 # Time to wait per cycle of the lock manager
+FAKE_LOCK_CHANCE = 33 # Percentage chance each cycle for a fake locking
 
 # Set of connected clients
 clients = set()
@@ -17,10 +19,14 @@ clients = set()
 lock = None
 # Queue of clients wanting to acquire the lock
 lock_queue = deque()
+# Task which manages the lock and it's acquisition
+lock_task = None
 # Number the clients need to guess
-secret_key = floor(random() * MAX_SIZE) * choice((1,-1))
+secret_key = floor(random() * MAX_SIZE) * choice((1, -1))
 
 # Handler for a client connecting
+
+
 async def connection(websocket, path):
     # Get globals
     global lock
@@ -30,19 +36,24 @@ async def connection(websocket, path):
     try:
         # For every message that the client sends
         async for message in websocket:
-            # Try to parse the message as a number
-            # (numbers are guesses, other messages may have special meanings)
             try:
+                # Try to parse the message as a number
+                # (numbers are guesses, other messages may have special meanings)
                 guess = int(message)
-                if guess == secret_key:
-                    await websocket.send('0')
-                    print("Client guessed the key!")
-                    secret_key = floor(random() * MAX_SIZE) * choice((1,-1))
-                    print("The secret number is {}. Sssshhh...".format(secret_key))
-                elif guess < secret_key:
-                    await websocket.send('-1')
-                else:
-                    await websocket.send('1')
+                # Make sure that the guesser has the lock
+                if lock is websocket:
+                    # Check the correctness of the guess
+                    if guess == secret_key:
+                        await websocket.send('0')
+                        print("Client guessed the key!")
+                        secret_key = floor(
+                            random() * MAX_SIZE) * choice((1, -1))
+                        print(
+                            "The secret number is {}. Sssshhh...".format(secret_key))
+                    elif guess < secret_key:
+                        await websocket.send('-1')
+                    else:
+                        await websocket.send('1')
             except:
                 # The message is not a guess, so let's check special messages
                 # If the client wants the lock, queue them up
@@ -57,16 +68,46 @@ async def connection(websocket, path):
     # Once all messages have been processed (the client is disconnected)
     # Remove the websocket from the set of connected clients
     clients.remove(websocket)
+    # Release the lock if the disconnected client is holding it
+    if lock is websocket:
+        lock = None
 
+
+async def lock_manager():
+    global lock
+    while True:
+        # Every second, process the current status of the lock
+        await asyncio.sleep(WAIT_TIME)
+        # If the lock is available, we may arbitrarily lock it as part of the
+        # simulation.
+        if lock == None:
+            if floor((random() * 100) + 1) <= FAKE_LOCK_CHANCE:
+                lock = 'fake_client'
+            else:
+                if len(lock_queue) > 0:
+                    lock = lock_queue.popleft()
+                    lock.send('lock acquired')
+        elif lock == 'fake_client':
+            lock = None
+        print(f'Lock: {lock}')
+
+
+async def start_server():
+    global lock_task
+    # Create the task to manage the lock
+    lock_task = asyncio.create_task(lock_manager())
+    # Create the server connection handler
+    websockets.serve(connection, "localhost", 8080)
 
 if __name__ == '__main__':
     try:
         # Print the initial secret number
         print("The secret number is {}. Sssshhh...".format(secret_key))
-        # Create the server connection handler
-        server_start = websockets.serve(connection, "localhost", 8080)
         # Run the server
-        asyncio.get_event_loop().run_until_complete(server_start)
+        asyncio.get_event_loop().run_until_complete(start_server())
         asyncio.get_event_loop().run_forever()
     except KeyboardInterrupt:
         print("\rServer closed by keypress...")
+    # Once the connection handler is completed (the server is closed), cancel
+    # the lock management task
+    lock_task.cancel()
