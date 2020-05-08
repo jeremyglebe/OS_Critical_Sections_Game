@@ -8,7 +8,7 @@ from math import floor
 from random import random, choice
 
 # Constants used for testing mostly
-MAX_SIZE = sys.maxsize / 10000000000  # Maximum value, positive and negative, to make key
+MAX_SIZE = sys.maxsize  # Maximum value, positive and negative, to make key
 WAIT_TIME = 0.01  # Time to wait per cycle of the lock manager
 FAKE_LOCK_CHANCE = 33  # Percentage chance each cycle for a fake locking
 

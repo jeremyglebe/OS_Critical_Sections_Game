@@ -9,6 +9,10 @@ from math import floor
 WAIT_TIME = 0.01  # Time to wait per guess
 PRINT_TIME = 2.5  # Time to wait per cycle of the printer
 
+gm_names = [
+    'Bounded Random',
+    'Binary Search'
+]
 
 class Client:
     def __init__(self):
@@ -20,8 +24,8 @@ class Client:
         # This is the socket connection to the server
         self.websocket = None
         # Variables to assist with guessing strategies
-        self.lower_bound = None
-        self.upper_bound = None
+        self.lower_bound = float('-inf')
+        self.upper_bound = float('inf')
 
     async def connect(self, host, port):
         url = "ws://{}:{}".format(host, port)
@@ -49,6 +53,8 @@ class Client:
                 # The client should attempt a guess once it has acquired a lock
                 if self.guess_mode == 0:
                     await self.bounded_guess()
+                elif self.guess_mode == 1:
+                    await self.binary_guess()
 
                 # Once the client has successfully guessed, it should release the lock
                 await self.websocket.send('release lock')
@@ -58,27 +64,63 @@ class Client:
         except websockets.ConnectionClosed:
             print("Disconnected from server...")
 
-    async def guess_random(self):
-        self.current_guess = floor(random() * 10) * choice((-1, 1))
+    async def binary_guess(self):
+        # Determine a guess based on upper/lower bounds
+        # If we don't yet have bounds, make a guess between -1M and +1M
+        if self.upper_bound == float('inf') and self.lower_bound == float('-inf'):
+            self.current_guess = floor(random() * 1000000) * choice((-1, 1))
+        # If there exists a lower bound but no upper bound, make a guess
+        # between LB and LB+2M
+        elif self.upper_bound == float('inf'):
+            self.current_guess = self.lower_bound + abs(self.lower_bound) + 1
+        # If there exists an upper bound but no lower bound, make a guess
+        # between UB - 2M and UB
+        elif self.lower_bound == float('-inf'):
+            self.current_guess = self.upper_bound - abs(self.upper_bound) - 1
+        # If bounds are the same, then someone else solved the number already and we missed it
+        elif self.lower_bound == self.upper_bound:
+            self.lower_bound = float('-inf')
+            self.upper_bound = float('inf')
+        # If both bounds exist, pick a value between the two
+        else:
+            self.current_guess = (self.lower_bound + self.upper_bound) // 2
+
+        # Send the guess
         await self.websocket.send(str(self.current_guess))
+        # Once a guess has been made, we need to wait for a response
+        # from the server
+        guess_resp = await self.websocket.recv()
+        # Print the information regarding the guess response
+        if guess_resp == '-1':
+            # Maybe update the lower bound
+            if self.current_guess > self.lower_bound:
+                self.lower_bound = self.current_guess
+        elif guess_resp == '1':
+            # Maybe update the upper bound
+            if self.current_guess < self.upper_bound:
+                self.upper_bound = self.current_guess
+        elif guess_resp == '0':
+            print(f"You guessed the key, {self.current_guess}!")
+            self.lower_bound = float('-inf')
+            self.upper_bound = float('inf')
 
     async def bounded_guess(self):
         # Determine a guess based on upper/lower bounds
         # If we don't yet have bounds, make a guess between -1M and +1M
-        if self.upper_bound == None and self.lower_bound == None:
+        if self.upper_bound == float('inf') and self.lower_bound == float('-inf'):
             self.current_guess = floor(random() * 1000000) * choice((-1, 1))
         # If there exists a lower bound but no upper bound, make a guess
         # between LB and LB+2M
-        elif self.upper_bound == None:
-            self.current_guess = self.lower_bound + 2000000
+        elif self.upper_bound == float('inf'):
+            self.current_guess = self.lower_bound + abs(self.lower_bound) + 1
         # If there exists an upper bound but no lower bound, make a guess
         # between UB - 2M and UB
-        elif self.lower_bound == None:
-            self.current_guess = self.upper_bound - 2000000
+        elif self.lower_bound == float('-inf'):
+            self.current_guess = self.upper_bound - abs(self.upper_bound) - 1
         # If bounds are the same, then someone else solved the number already and we missed it
         elif self.lower_bound == self.upper_bound:
-            self.lower_bound = None
-            self.upper_bound = None
+            self.lower_bound = float('-inf')
+            self.upper_bound = float('inf')
         # If both bounds exist, pick a value between the two
         else:
             self.current_guess = randrange(self.lower_bound, self.upper_bound + 1)
@@ -91,21 +133,21 @@ class Client:
         # Print the information regarding the guess response
         if guess_resp == '-1':
             # Maybe update the lower bound
-            if self.lower_bound == None or self.current_guess > self.lower_bound:
+            if self.current_guess > self.lower_bound:
                 self.lower_bound = self.current_guess
         elif guess_resp == '1':
             # Maybe update the upper bound
-            if self.upper_bound == None or self.current_guess < self.upper_bound:
+            if self.current_guess < self.upper_bound:
                 self.upper_bound = self.current_guess
         elif guess_resp == '0':
             print(f"You guessed the key, {self.current_guess}!")
-            self.upper_bound = None
-            self.lower_bound = None
+            self.lower_bound = float('-inf')
+            self.upper_bound = float('inf')
 
     async def printer(self):
         while True:
             await asyncio.sleep(PRINT_TIME)
-            print(f"Bounds: {self.lower_bound}L, {self.upper_bound}H")
+            print(f"Guess Mode: {gm_names[self.guess_mode]}; Bounds: {self.lower_bound}L, {self.upper_bound}H")
 
     def set_mode(self, guess_mode):
         self.guess_mode = guess_mode
@@ -115,12 +157,18 @@ class Client:
 
 
 if __name__ == '__main__':
+    import sys
+    if len(sys.argv) > 1:
+        gmode = int(sys.argv[1])
+    else:
+        gmode = 0
     try:
         # Get the server to connect to
         host = input("Enter host address: ")
         port = input("Enter host port: ")
         # Create a client object
         cli = Client()
+        cli.set_mode(gmode)
         cli.start()
     except KeyboardInterrupt:
         print("\rClient closed by keypress...")
