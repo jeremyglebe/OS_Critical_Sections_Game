@@ -16,9 +16,6 @@ class Client:
         # This is the socket connection to the server
         self.websocket = None
 
-    def set_mode(self, guess_mode):
-        self.guess_mode = guess_mode
-
     async def connect(self, host, port):
         url = "ws://{}:{}".format(host, port)
         self.websocket = await websockets.connect(url)
@@ -53,6 +50,12 @@ class Client:
                     print(f"You guessed the key, {self.current_guess}!")
         except websockets.ConnectionClosed:
             print("Error: Unexpected disconnection!")
+    
+    def set_mode(self, guess_mode):
+        self.guess_mode = guess_mode
+
+    def start(self):
+        asyncio.get_event_loop().run_until_complete(self.connect(host, port))
 
 
 if __name__ == '__main__':
@@ -62,6 +65,6 @@ if __name__ == '__main__':
         port = input("Enter host port: ")
         # Create a client object
         cli = Client()
-        asyncio.get_event_loop().run_until_complete(cli.connect(host, port))
+        cli.start()
     except KeyboardInterrupt:
         print("\rClient closed by keypress...")
