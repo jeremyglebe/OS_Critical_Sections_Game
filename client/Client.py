@@ -203,14 +203,14 @@ class Client:
 
 if __name__ == '__main__':
     import sys
-    if len(sys.argv) > 1:
-        gmode = int(sys.argv[1])
+    if len(sys.argv) > 3:
+        gmode = int(sys.argv[3])
     else:
         gmode = 0
     try:
         # Get the server to connect to
-        host = input("Enter host address: ")
-        port = input("Enter host port: ")
+        host = int(sys.argv[1])
+        port = int(sys.argv[2])
         # Create a client object
         cli = Client()
         cli.set_mode(gmode)
