@@ -6,7 +6,8 @@ from random import random, randrange, choice
 from math import floor
 
 # Constants used for testing mostly
-WAIT_TIME = 0.01  # Time to wait per cycle of the lock manager
+WAIT_TIME = 0.01  # Time to wait per guess
+PRINT_TIME = 2.5  # Time to wait per cycle of the printer
 
 
 class Client:
@@ -25,9 +26,11 @@ class Client:
     async def connect(self, host, port):
         url = "ws://{}:{}".format(host, port)
         self.websocket = await websockets.connect(url)
-        print("got connected")
+        print("Connected!")
         guess_task = asyncio.create_task(self.guess())
+        print_task = asyncio.create_task(self.printer())
         await guess_task
+        print_task.cancel()
         await self.websocket.close()
         print("Disconnected!")
 
@@ -87,14 +90,10 @@ class Client:
         guess_resp = await self.websocket.recv()
         # Print the information regarding the guess response
         if guess_resp == '-1':
-            print(
-                f"{self.current_guess} is too low! Bounds {self.upper_bound}, {self.lower_bound}")
             # Maybe update the lower bound
             if self.lower_bound == None or self.current_guess > self.lower_bound:
                 self.lower_bound = self.current_guess
         elif guess_resp == '1':
-            print(
-                f"{self.current_guess} is too high! Bounds {self.upper_bound}, {self.lower_bound}")
             # Maybe update the upper bound
             if self.upper_bound == None or self.current_guess < self.upper_bound:
                 self.upper_bound = self.current_guess
@@ -102,6 +101,11 @@ class Client:
             print(f"You guessed the key, {self.current_guess}!")
             self.upper_bound = None
             self.lower_bound = None
+
+    async def printer(self):
+        while True:
+            await asyncio.sleep(PRINT_TIME)
+            print(f"Bounds: {self.lower_bound}L, {self.upper_bound}H")
 
     def set_mode(self, guess_mode):
         self.guess_mode = guess_mode
