@@ -11,8 +11,10 @@ PRINT_TIME = 2.5  # Time to wait per cycle of the printer
 
 gm_names = [
     'Bounded Random',
-    'Binary Search'
+    'Binary Search',
+    'Brute Force Search'
 ]
+
 
 class Client:
     def __init__(self):
@@ -55,6 +57,8 @@ class Client:
                     await self.bounded_guess()
                 elif self.guess_mode == 1:
                     await self.binary_guess()
+                elif self.guess_mode == 2:
+                    await self.brute_guess()
 
                 # Once the client has successfully guessed, it should release the lock
                 await self.websocket.send('release lock')
@@ -123,7 +127,8 @@ class Client:
             self.upper_bound = float('inf')
         # If both bounds exist, pick a value between the two
         else:
-            self.current_guess = randrange(self.lower_bound, self.upper_bound + 1)
+            self.current_guess = randrange(
+                self.lower_bound, self.upper_bound + 1)
 
         # Send the guess
         await self.websocket.send(str(self.current_guess))
@@ -144,10 +149,50 @@ class Client:
             self.lower_bound = float('-inf')
             self.upper_bound = float('inf')
 
+    async def brute_guess(self):
+        # Determine a guess based on upper/lower bounds
+        # If we don't yet have bounds, guess 0
+        if self.upper_bound == float('inf') and self.lower_bound == float('-inf'):
+            self.current_guess = 0
+        # If there exists a lower bound but no upper bound, make a guess 1 higher
+        elif self.upper_bound == float('inf'):
+            self.current_guess = self.lower_bound + 1
+        # If there exists an upper bound but no lower bound, make a guess 1 lower
+        elif self.lower_bound == float('-inf'):
+            self.current_guess = self.upper_bound - 1
+            
+        # Send the guess
+        await self.websocket.send(str(self.current_guess))
+        # Once a guess has been made, we need to wait for a response
+        # from the server
+        guess_resp = await self.websocket.recv()
+        # Print the information regarding the guess response
+        if guess_resp == '-1':
+            # Update the lower bound if our guess is less than the current lower bound
+            if self.current_guess > self.lower_bound:
+                self.lower_bound = self.current_guess
+            # If our guess is greater than the current lower bound, but still low, then
+            # the number must have changed and thus we need to reset
+            else:
+                self.lower_bound = float('-inf')
+                self.upper_bound = float('inf')
+        elif guess_resp == '1':
+            # Update or reset
+            if self.current_guess < self.upper_bound:
+                self.upper_bound = self.current_guess
+            else:
+                self.lower_bound = float('-inf')
+                self.upper_bound = float('inf')
+        elif guess_resp == '0':
+            print(f"You guessed the key, {self.current_guess}!")
+            self.lower_bound = float('-inf')
+            self.upper_bound = float('inf')
+
     async def printer(self):
         while True:
             await asyncio.sleep(PRINT_TIME)
-            print(f"Guess Mode: {gm_names[self.guess_mode]}; Bounds: {self.lower_bound}L, {self.upper_bound}H")
+            print(
+                f"Guess Mode: {gm_names[self.guess_mode]}; Bounds: {self.lower_bound}L, {self.upper_bound}H")
 
     def set_mode(self, guess_mode):
         self.guess_mode = guess_mode
