@@ -73,21 +73,26 @@ async def connection(websocket, path):
 async def lock_manager():
     global lock
     while True:
-        # Every second, process the current status of the lock
-        await asyncio.sleep(WAIT_TIME)
-        # If the lock is available, we may arbitrarily lock it as part of the
-        # simulation.
-        if lock == None:
-            if floor((random() * 100) + 1) <= FAKE_LOCK_CHANCE:
-                lock = 'fake_client'
-            else:
-                if len(lock_queue) > 0:
-                    lock = lock_queue.popleft()
-                    print("Sending lock acquired")
-                    await lock.send('lock acquired')
-        elif lock == 'fake_client':
+        try:
+            # Every second, process the current status of the lock
+            await asyncio.sleep(WAIT_TIME)
+            # If the lock is available, we may arbitrarily lock it as part of the
+            # simulation.
+            if lock == None:
+                if floor((random() * 100) + 1) <= FAKE_LOCK_CHANCE:
+                    lock = 'fake_client'
+                else:
+                    if len(lock_queue) > 0:
+                        lock = lock_queue.popleft()
+                        print("Sending lock acquired")
+                        await lock.send('lock acquired')
+            elif lock == 'fake_client':
+                lock = None
+            print(f'Lock: {lock}')
+        except websockets.ConnectionClosed:
+            print("Failed to send signal to disconnected client...")
+            # Reset lock if the signal failed because the client disconnected
             lock = None
-        print(f'Lock: {lock}')
 
 if __name__ == '__main__':
     try:
@@ -98,10 +103,9 @@ if __name__ == '__main__':
         asyncio.get_event_loop().run_until_complete(server_start)
         # Run the lock manager until manually closed
         asyncio.get_event_loop().run_until_complete(lock_manager())
-
-        # If the code above does not run infinitely, we can prevent the server
-        # from closing with run_forever
-        # asyncio.get_event_loop().run_forever()
+        # Once last assurance that the server won't close until manual
+        # key press is performed
+        asyncio.get_event_loop().run_forever()
     except KeyboardInterrupt:
         print("\rServer closed by keypress...")
     # Close the server
