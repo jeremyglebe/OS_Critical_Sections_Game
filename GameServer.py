@@ -8,9 +8,9 @@ from math import floor
 from random import random, choice
 
 # Constants used for testing mostly
-MAX_SIZE = sys.maxsize # Maximum value, positive and negative, to make key
-WAIT_TIME = .1 # Time to wait per cycle of the lock manager
-FAKE_LOCK_CHANCE = 33 # Percentage chance each cycle for a fake locking
+MAX_SIZE = sys.maxsize  # Maximum value, positive and negative, to make key
+WAIT_TIME = 1  # Time to wait per cycle of the lock manager
+FAKE_LOCK_CHANCE = 33  # Percentage chance each cycle for a fake locking
 
 # Set of connected clients
 clients = set()
@@ -19,15 +19,12 @@ clients = set()
 lock = None
 # Queue of clients wanting to acquire the lock
 lock_queue = deque()
-# Task which manages the lock and it's acquisition
-lock_task = None
 # Number the clients need to guess
 secret_key = floor(random() * MAX_SIZE) * choice((1, -1))
 
-# Handler for a client connecting
-
 
 async def connection(websocket, path):
+    '''Handler for a client connecting'''
     # Get globals
     global lock
     global secret_key
@@ -86,28 +83,26 @@ async def lock_manager():
             else:
                 if len(lock_queue) > 0:
                     lock = lock_queue.popleft()
-                    lock.send('lock acquired')
+                    print("Sending lock acquired")
+                    await lock.send('lock acquired')
         elif lock == 'fake_client':
             lock = None
         print(f'Lock: {lock}')
-
-
-async def start_server():
-    global lock_task
-    # Create the task to manage the lock
-    lock_task = asyncio.create_task(lock_manager())
-    # Create the server connection handler
-    websockets.serve(connection, "localhost", 8080)
 
 if __name__ == '__main__':
     try:
         # Print the initial secret number
         print("The secret number is {}. Sssshhh...".format(secret_key))
         # Run the server
-        asyncio.get_event_loop().run_until_complete(start_server())
-        asyncio.get_event_loop().run_forever()
+        server_start = websockets.serve(connection, "localhost", 8080)
+        asyncio.get_event_loop().run_until_complete(server_start)
+        # Run the lock manager until manually closed
+        asyncio.get_event_loop().run_until_complete(lock_manager())
+
+        # If the code above does not run infinitely, we can prevent the server
+        # from closing with run_forever
+        # asyncio.get_event_loop().run_forever()
     except KeyboardInterrupt:
         print("\rServer closed by keypress...")
-    # Once the connection handler is completed (the server is closed), cancel
-    # the lock management task
-    lock_task.cancel()
+    # Close the server
+    server_start.ws_server.close()

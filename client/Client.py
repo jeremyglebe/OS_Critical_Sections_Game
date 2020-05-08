@@ -19,38 +19,51 @@ class Client:
     async def connect(self, host, port):
         url = "ws://{}:{}".format(host, port)
         self.websocket = await websockets.connect(url)
+        print("got connected")
         guess_task = asyncio.create_task(self.guess())
-        response_task = asyncio.create_task(self.listen_response())
         await guess_task
-        response_task.cancel()
         await self.websocket.close()
         print("Disconnected!")
 
     async def guess(self):
         try:
             while True:
+                # The client needs to acquire a lock with the server before it
+                # can proceed
+                # Request the lock
+                await self.websocket.send('request lock')
+                # Wait to acquire the lock
+                resp = ''
+                while not resp == 'lock acquired':
+                    resp = await self.websocket.recv()
+
+                # The client should attempt a guess once it has acquired a lock
                 if self.guess_mode == 0:
                     await self.guess_random()
+
+                # Once a guess has been made, we need to wait for a response
+                # from the server
+                guess_resp = await self.websocket.recv()
+                # Print the information regarding the guess response
+                if guess_resp == '-1':
+                    print(f"{self.current_guess} is too low!")
+                elif guess_resp == '1':
+                    print(f"{self.current_guess} is too high!")
+                elif guess_resp == '0':
+                    print(f"You guessed the key, {self.current_guess}!")
+
+                # Once the client has successfully guessed, it should release the lock
+                await self.websocket.send('release lock')
+
+                # Wait a moment between guesses
                 await asyncio.sleep(1)
         except websockets.ConnectionClosed:
             print("Disconnected from server...")
 
     async def guess_random(self):
-        self.current_guess = floor(random() * 10) * choice((-1,1))
+        self.current_guess = floor(random() * 10) * choice((-1, 1))
         await self.websocket.send(str(self.current_guess))
 
-    async def listen_response(self):
-        try:
-            async for message in self.websocket:
-                if message == '-1':
-                    print(f"{self.current_guess} is too low!")
-                elif message == '1':
-                    print(f"{self.current_guess} is too high!")
-                elif message == '0':
-                    print(f"You guessed the key, {self.current_guess}!")
-        except websockets.ConnectionClosed:
-            print("Error: Unexpected disconnection!")
-    
     def set_mode(self, guess_mode):
         self.guess_mode = guess_mode
 
